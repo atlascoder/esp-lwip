@@ -93,6 +93,7 @@ Steve Reynolds
 #include "lwip/netif.h"
 #include "lwip/stats.h"
 #include "lwip/prot/igmp.h"
+#include "lwip/timeouts.h"
 
 #include "string.h"
 
@@ -106,6 +107,10 @@ static void   igmp_send(struct netif *netif, struct igmp_group *group, u8_t type
 
 static ip4_addr_t     allsystems;
 static ip4_addr_t     allrouters;
+
+#if ESP_LWIP_IGMP_TIMERS_ONDEMAND
+static bool is_tmr_start = false;
+#endif
 
 /**
  * Initialize the IGMP module
@@ -639,6 +644,9 @@ void
 igmp_tmr(void)
 {
   struct netif *netif = netif_list;
+#if ESP_LWIP_IGMP_TIMERS_ONDEMAND
+  bool tmr_restart = false;
+#endif
 
   while (netif != NULL) {
     struct igmp_group *group = netif_igmp_data(netif);
@@ -649,11 +657,25 @@ igmp_tmr(void)
         if (group->timer == 0) {
           igmp_timeout(netif, group);
         }
+#if ESP_LWIP_IGMP_TIMERS_ONDEMAND
+        else {
+          tmr_restart = true;
+        }
+#endif
       }
       group = group->next;
     }
     netif = netif->next;
   }
+
+#if ESP_LWIP_IGMP_TIMERS_ONDEMAND
+  if (tmr_restart) {
+    sys_timeout(IGMP_TMR_INTERVAL, igmp_tmr, NULL);
+  } else {
+    sys_untimeout(igmp_tmr, NULL);
+    is_tmr_start = false;
+  }
+#endif
 }
 
 /**
@@ -700,6 +722,13 @@ igmp_start_timer(struct igmp_group *group, u8_t max_time)
   if (group->timer == 0) {
     group->timer = 1;
   }
+
+#if ESP_LWIP_IGMP_TIMERS_ONDEMAND
+  if (!is_tmr_start) {
+    sys_timeout(IGMP_TMR_INTERVAL, igmp_tmr, NULL);
+    is_tmr_start = true;
+  }
+#endif
 }
 
 /**
