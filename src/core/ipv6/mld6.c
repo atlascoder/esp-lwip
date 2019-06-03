@@ -83,6 +83,7 @@ static void mld6_delayed_report(struct mld_group *group, u16_t maxresp);
 static void mld6_send(struct netif *netif, struct mld_group *group, u8_t type);
 
 #if ESP_LWIP_MLD6_TIMERS_ONDEMAND
+#include "stdbool.h"
 static bool is_tmr_start = false;
 #endif
 
@@ -450,6 +451,15 @@ mld6_leavegroup_netif(struct netif *netif, const ip6_addr_t *groupaddr)
   return ERR_VAL;
 }
 
+/**
+ * Wrapper function with matching prototype which calls the actual callback
+ */
+static void mld6_timeout_cb(void *arg)
+{
+  LWIP_UNUSED_ARG(arg);
+
+  mld6_tmr();
+}
 
 /**
  * Periodic timer for mld processing. Must be called every
@@ -492,9 +502,9 @@ mld6_tmr(void)
 
 #if ESP_LWIP_MLD6_TIMERS_ONDEMAND
   if (tmr_restart) {
-    sys_timeout(MLD6_TMR_INTERVAL, mld6_tmr, NULL);
+    sys_timeout(MLD6_TMR_INTERVAL, mld6_timeout_cb, NULL);
   } else {
-    sys_untimeout(mld6_tmr, NULL);
+    sys_untimeout(mld6_timeout_cb, NULL);
     is_tmr_start = false;
   }
 #endif
@@ -533,7 +543,7 @@ mld6_delayed_report(struct mld_group *group, u16_t maxresp)
 
 #if ESP_LWIP_MLD6_TIMERS_ONDEMAND
     if (!is_tmr_start) {
-      sys_timeout(MLD6_TMR_INTERVAL, mld6_tmr, NULL);
+      sys_timeout(MLD6_TMR_INTERVAL, mld6_timeout_cb, NULL);
       is_tmr_start = true;
     }
 #endif

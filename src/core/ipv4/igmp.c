@@ -109,6 +109,7 @@ static ip4_addr_t     allsystems;
 static ip4_addr_t     allrouters;
 
 #if ESP_LWIP_IGMP_TIMERS_ONDEMAND
+#include "stdbool.h"
 static bool is_tmr_start = false;
 #endif
 
@@ -637,6 +638,16 @@ igmp_leavegroup_netif(struct netif *netif, const ip4_addr_t *groupaddr)
 }
 
 /**
+ * Wrapper function with matching prototype which calls the actual callback
+ */
+static void igmp_timeout_cb(void *arg)
+{
+  LWIP_UNUSED_ARG(arg);
+
+  igmp_tmr();
+}
+
+/**
  * The igmp timer function (both for NO_SYS=1 and =0)
  * Should be called every IGMP_TMR_INTERVAL milliseconds (100 ms is default).
  */
@@ -670,9 +681,9 @@ igmp_tmr(void)
 
 #if ESP_LWIP_IGMP_TIMERS_ONDEMAND
   if (tmr_restart) {
-    sys_timeout(IGMP_TMR_INTERVAL, igmp_tmr, NULL);
+    sys_timeout(IGMP_TMR_INTERVAL, igmp_timeout_cb, NULL);
   } else {
-    sys_untimeout(igmp_tmr, NULL);
+    sys_untimeout(igmp_timeout_cb, NULL);
     is_tmr_start = false;
   }
 #endif
@@ -725,7 +736,7 @@ igmp_start_timer(struct igmp_group *group, u8_t max_time)
 
 #if ESP_LWIP_IGMP_TIMERS_ONDEMAND
   if (!is_tmr_start) {
-    sys_timeout(IGMP_TMR_INTERVAL, igmp_tmr, NULL);
+    sys_timeout(IGMP_TMR_INTERVAL, igmp_timeout_cb, NULL);
     is_tmr_start = true;
   }
 #endif
